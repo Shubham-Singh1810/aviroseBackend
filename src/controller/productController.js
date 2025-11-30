@@ -40,62 +40,34 @@ productController.post("/list", async (req, res) => {
       pageCount = 10,
       sortByField,
       sortByOrder,
-      pincode
+      pincode,
     } = req.body;
 
-    const matchStage = {};
-    if (status) matchStage.status = status;
-    if (searchKey) matchStage.name = { $regex: searchKey, $options: "i" };
-
-    const sortField = sortByField || "createdAt";
-    const sortOrder = sortByOrder === "asc" ? 1 : -1;
+    let matchStage = {};
+    if (status !== undefined) matchStage.status = status;
+    if (searchKey)
+      matchStage.name = { $regex: searchKey, $options: "i" };
 
     const aggregatePipeline = [
-  {
-    $lookup: {
-      from: "vendors",
-      localField: "venderId",
-      foreignField: "_id",
-      as: "venderDetails",
-    },
-  },
-  {
-    $lookup: {
-      from: "categories",
-      localField: "categoryId",
-      foreignField: "_id",
-      as: "categoryDetails",
-    },
-  },
-  {
-    $match: matchStage,
-  },
-];
+      {
+        $lookup: {
+          from: "vendors",
+          localField: "venderId",
+          foreignField: "_id",
+          as: "venderDetails",
+        },
+      },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "categoryId",
+          foreignField: "_id",
+          as: "categoryDetails",
+        },
+      },
+      { $match: matchStage },
+    ];
 
-// pincode filter lagana ho toh
-if (pincode) {
-  aggregatePipeline.push({
-    $match: {
-      "venderDetails.pincode": pincode,
-    },
-  });
-}
-
-// Sorting
-aggregatePipeline.push({
-  $sort: {
-    [sortField]: sortOrder,
-  },
-});
-
-// Pagination
-aggregatePipeline.push(
-  { $skip: (parseInt(pageNo) - 1) * parseInt(pageCount) },
-  { $limit: parseInt(pageCount) }
-);
-
-
-    // pincode filter lagana ho toh
     if (pincode) {
       aggregatePipeline.push({
         $match: {
@@ -104,23 +76,52 @@ aggregatePipeline.push(
       });
     }
 
-    // Sorting
-    aggregatePipeline.push({
-      $sort: {
-        [sortField]: sortOrder,
-      },
-    });
+    const sortField = sortByField || "createdAt";
+    const sortOrder = sortByOrder === "asc" ? 1 : -1;
 
-    // Pagination
     aggregatePipeline.push(
-      { $skip: (parseInt(pageNo) - 1) * parseInt(pageCount) },
-      { $limit: parseInt(pageCount) }
+      { $sort: { [sortField]: sortOrder } },
+      { $skip: (pageNo - 1) * pageCount },
+      { $limit: pageCount }
     );
 
     const productList = await Product.aggregate(aggregatePipeline);
 
-    const totalCount = await Product.countDocuments({});
-    const activeCount = await Product.countDocuments({ status: true });
+    // Correct count ke liye match lagana zaroori hai
+    const countPipeline = [
+      {
+        $lookup: {
+          from: "vendors",
+          localField: "venderId",
+          foreignField: "_id",
+          as: "venderDetails",
+        },
+      },
+      { $match: matchStage }
+    ];
+
+    if (pincode) {
+      countPipeline.push({
+        $match: {
+          "venderDetails.pincode": pincode,
+        },
+      });
+    }
+
+    const counts = await Product.aggregate([
+      ...countPipeline,
+      {
+        $group: {
+          _id: null,
+          totalCount: { $sum: 1 },
+          activeCount: {
+            $sum: { $cond: ["$status", 1, 0] },
+          },
+        },
+      },
+    ]);
+
+    const { totalCount = 0, activeCount = 0 } = counts[0] || {};
 
     sendResponse(res, 200, "Success", {
       message: "Product list retrieved successfully!",
@@ -140,6 +141,7 @@ aggregatePipeline.push(
     });
   }
 });
+
 
 
 // productController.post("/list", async (req, res) => {
