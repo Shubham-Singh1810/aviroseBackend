@@ -21,6 +21,9 @@ const bannerSchema = mongoose.Schema({
   },
   link:{
     type: String,
+  },
+   rank:{
+    type: Number,
   }
 });
 

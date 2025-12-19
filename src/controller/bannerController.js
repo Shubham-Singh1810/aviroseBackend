@@ -49,8 +49,8 @@ bannerController.post("/list", async (req, res) => {
     const query = {};
     if (status) query.status = status; 
     if (searchKey) query.name = { $regex: searchKey, $options: "i" }; 
-    const sortField = sortByField || "createdAt"; 
-    const sortOrder = sortByOrder === "asc" ? 1 : -1; 
+    const sortField = sortByField || "rank"; 
+    const sortOrder = sortByOrder === "asc" ? -1 : 1; 
     const sortOption = { [sortField]: sortOrder };
     const bannerList = await Banner.find(query)
       .sort(sortOption)
